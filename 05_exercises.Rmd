@@ -131,7 +131,6 @@ ggplotly(interactiveTrips)
 small_trains %>%
   #mutate(month = month(month, label = TRUE, abbr = TRUE)) %>%      # couldn't get this to convert nums to date effectively
   filter(arrival_station %in% c("PARIS EST", "PARIS LYON", "PARIS MONTPARNASSE", "PARIS NORD", "PARIS VAUGIRARD")) %>%
-
   group_by(arrival_station, month) %>%
   summarise(grandTotal = sum(total_num_trips)) %>%
   ggplot(aes(x = month, y = grandTotal, color = arrival_station)) +
@@ -300,6 +299,29 @@ anim_save("covid_path.gif")
 ```{r}
 knitr::include_graphics("covid_path.gif")
 ```
+
+```{r}
+covid_graph<-
+covid19 %>% 
+  group_by(state) %>% 
+  mutate(lag_7=lag(cases, n=1, order_by=date)) %>% 
+  replace_na(list(lag_7=0)) %>% 
+  mutate(new_weekly_cases=cases-lag_7) %>% 
+  filter(cases>20) %>% 
+  ggplot(aes(x=cases, y=new_weekly_cases))+
+  geom_path(aes(group=state))+
+  geom_point(aes(x=cases, y=new_weekly_cases))+
+  geom_text(aes(label = state), check_overlap=TRUE)+
+  scale_x_log10(label=comma)+
+  scale_y_log10(label=comma)+
+  labs(title="New Weekly COVID-19 Cases by US State",
+       x="Total Cases",
+       y="New Weekly Cases")+
+  transition_reveal(date)+
+  shadow_mark(past=TRUE)
+  animate(covid_graph, nframes=200, duration=30)
+```
+
 **There are clear leaders such as New York and California, but eventually they all fall along a similar projection**
 
   7. In this exercise you will animate a map of the US, showing how cumulative COVID-19 cases per 10,000 residents has changed over time. This is similar to exercises 11 & 12 from the previous exercises, with the added animation! So, in the end, you should have something like the static map you made there, but animated over all the days. Put date in the subtitle. Comment on what you see.
@@ -346,6 +368,43 @@ anim_save("covid_map.gif")
 knitr::include_graphics("covid_map.gif")
 ```
 
+```{r, eval = FALSE}
+census_pop_est_2018 <- read_csv("https://www.dropbox.com/s/6txwv3b4ng7pepe/us_census_2018_state_pop_est.csv?dl=1") %>% 
+  separate(state, into = c("dot","state"), extra = "merge") %>% 
+  select(-dot) %>% 
+  mutate(state = str_to_lower(state))
+
+states_map <- map_data("state")
+
+covid_total2 <- covid19 %>% 
+  mutate(state = str_to_lower(state)) %>% 
+  mutate(day_of_week = wday(date, label = TRUE)) %>%
+  filter(day_of_week == "Fri") %>%
+  group_by(state, date) %>% 
+  left_join(census_pop_est_2018,
+            by = "state") %>% 
+  mutate(cases_per = cases/est_pop_2018*10000)
+
+covid_anim <- 
+  covid_total2 %>% 
+  ggplot() +
+  geom_map(map = states_map,
+           aes(map_id = state,
+               fill = cases_per, group = date)) +
+  expand_limits(x = states_map$long, y = states_map$lat) + 
+  theme_map() + 
+  labs(title = "Covid-19 Cases by State", 
+       fill = "Cases per 10,000 People",
+       subtitle = "Date: {frame_along}") +
+  scale_fill_gradient(low = "#37ccbd", high = "#de651b", na.value = "#808080") +
+  theme(legend.background = element_blank()) +
+  transition_reveal(date)
+
+animate(covid_anim, nframes = 200, duration = 30, end_pause = 10)
+
+anim_save("covidanim.gif")
+
+```
 ## Your first `shiny` app
 
   8. This app will also use the COVID data. Make sure you load that data and all the libraries you need in the `app.R` file you create. Below, you will post a link to the app that you publish on shinyapps.io. You will create an app to compare states' cumulative number of COVID cases over time. The x-axis will be number of days since 20+ cases and the y-axis will be cumulative cases on the log scale (`scale_y_log10()`). We use number of days since 20+ cases on the x-axis so we can make better comparisons of the curve trajectories. You will have an input box where the user can choose which states to compare (`selectInput()`) and have a submit button to click once the user has chosen all states they're interested in comparing. The graph should display a different line for each state, with labels either on the graph or in a legend. Color can be used if needed. 
